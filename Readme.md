@@ -6,4 +6,4 @@
 `
 
 ### Thoughts
-I was unable to complete all requested features within the aloted time.  Although I feel I was near completed once I developed the pattern to keep track of log rates each second.
+I was unable to complete all requested features within the allotted time.  Although I feel I was near completed once I developed the pattern to keep track of log rates each second.
