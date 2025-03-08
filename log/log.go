@@ -28,8 +28,7 @@ type log struct {
 [2025-03-07T18:52:04Z] ERROR - IP:192.168.9.208 Error 500 - Null pointer exception
 */
 
-var logRegex = regexp.MustCompile(`^\[(?P<date>.*?)\] (?P<loglevel>.*?) - IP:(?P<ipAddress>(?:\d{1,3}.){3}\d{1,3})\s*(?:Error (?P<errorCode>\d{3}) - (?P<errorMessage>.*))?$`)
-
+var logRegex = regexp.MustCompile(`^\[(?P<date>.*?)\] (?P<loglevel>.*?) - IP:(?P<ipAddress>(?:\d{1,3}.){3}\d{1,3})\s*(?P<logMessage>.*)$`)
 
 func extractTextFromLine(regexp *regexp.Regexp, text string) map[string]string {
 	match := regexp.FindStringSubmatch(text)

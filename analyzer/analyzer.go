@@ -10,21 +10,27 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/rivo/tview"
 )
 
+var originalSlidingWindow = 5 // in seconds
+var errorRateThreshold    = 5  // how many per second
+
 type analyzer struct {
-	logCount int
-	logger logger
-	textView *tview.TextView
-	textApp *tview.Application
-	reportDelay int // report delay in seconds
-	peekRate    int
-	alerts      alerts
-	levelCount  logLevels
-	// logMessages logMessages    
+	logger         logger
+	reportDelay    int // report delay in seconds
+	alerts         alerts
+	totalCounter   traceable_i
+	levelCounter   rateCounters
+	messageCounter rateCounters
+	slidingWindow  int
 	lk sync.Mutex
+}
+
+type rateCounters interface {
+	IncrOne(label string)
+	Rate(label string) int64
+	GetTotal(label string) uint64
+	SnapShot()
 }
 
 type textSetter interface {
@@ -32,48 +38,62 @@ type textSetter interface {
 }
 
 func NewAnalzyer(logger logger) analyzer {
-	app := tview.NewApplication()
-	textView := tview.NewTextView()
 	return analyzer{
-		logCount: 0,
-		textView: textView,
-		textApp: app,
-		reportDelay: 1,
+		reportDelay: originalSlidingWindow,
 		logger: logger,
-		levelCount: logLevels{},
-		// logMessages: logMessages{},
+		levelCounter: traceables{},
+		messageCounter: traceables{},
+		totalCounter: newTraceable(),
+		slidingWindow: originalSlidingWindow,
 		alerts: alerts{},
 	}
 }
 
 func (a *analyzer) String()string{
-	now := time.Now().Format(time.RFC3339)
-
 	return fmt.Sprintf(`
 Log Analysis Report (Last Updated: %s)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Runtime Stats:
 • Entries Processed: %d
-• Current Rate: <TODO>
-• Adaptive Window: <TODO>
+• Current Rate: %d entries/sec (Peak: %d entries/sec)
+• Adaptive Window: %d sec%s
 
 Pattern Analysis:
 %s
 
 Dynamic Insights:
-<TODO>
+• Error Rate: %d errors/sec
+<TODO: Emerging patterns>
 • Top Errors:
 <TODO>
 
 Self-Evolving Alerts:
-%s`, now, a.logCount, a.levelCount, a.alerts)
+%s`, 
+	time.Now().Format(time.RFC3339), 
+	a.totalCounter.GetTotal(), 
+	a.totalCounter.Rate(),
+	a.totalCounter.GetPeekRate(),
+	a.reportDelay,
+	"", // TODO: update window size and show 
+	ToLogLevelString(a.levelCounter.(traceables)), 
+	a.levelCounter.Rate("ERROR"),
+	a.alerts)
+}
+
+func (a *analyzer) analyzeRates() {
+	a.totalCounter.SnapShot()
+	a.levelCounter.SnapShot()
+	a.messageCounter.SnapShot()
+
+	// TODO: trigger any alerts
+	// TODO: adjust 'reportDelay' window time if necessary
 }
 
 func (a *analyzer) IncludeLog(logLine *string) error {
 	a.lk.Lock()
 	defer a.lk.Unlock()
 
-	a.logCount++
+	a.totalCounter.IncrOne()
 
 	log, err := log.NewLog(*logLine)
 	if err != nil {
@@ -81,22 +101,20 @@ func (a *analyzer) IncludeLog(logLine *string) error {
 		return nil
 	}
 
-	if _, ok := a.levelCount[log.LogLevel]; ok {
-		a.levelCount[log.LogLevel] ++
-	} else {
-		a.levelCount[log.LogLevel] = 0
-	}
-
-	// TODO: calc latest log entry rate
-	// TODO: trigger any alerts
-	// TODO: adjust 'reportDelay' window time if necessary
-	// TODO: track error rates
-	// TODO: calc any patterns
+	a.levelCounter.IncrOne(log.LogLevel)
+	a.messageCounter.IncrOne(log.Message)
 
 	return nil
 }
 
-func (a *analyzer) PrintUpdates(ctx context.Context) error {
+func (a *analyzer) Analyze(ctx context.Context) error {
+	go func() {
+		for ctx.Err() == nil {
+			time.Sleep(time.Second)
+			a.analyzeRates()
+		}
+	}()
+
 	go func() {
 		for ctx.Err() == nil {
 			clearScreen()

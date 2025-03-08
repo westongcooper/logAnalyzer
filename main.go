@@ -48,7 +48,7 @@ func main() {
 
 	analyzer := analyzer.NewAnalzyer(logger)
 
-	analyzer.PrintUpdates(ctx)
+	analyzer.Analyze(ctx)
 
 	// ======== Set up parser to conditionally include lines
 	parsables := []parser.Parsable{
